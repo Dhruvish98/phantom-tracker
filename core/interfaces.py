@@ -182,6 +182,12 @@ class PipelineConfig:
     max_lost_frames: int = 300
     association_iou_threshold: float = 0.3
 
+    # Tracking — boxmot specific
+    boxmot_reid_weights: str = "osnet_x1_0_msmt17.pt"
+    tracker_device: str = "cuda"
+    tracker_half_precision: bool = False
+    prediction_horizon: int = 15
+
     # Re-ID
     reid_model: str = "osnet_x1_0"
     reid_confidence_threshold: float = 0.6

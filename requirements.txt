@@ -14,8 +14,7 @@ ultralytics>=8.3.0      # YOLOv11
 
 # --- Tracking (Dhruvish) ---
 # ultralytics includes built-in BoT-SORT/ByteTrack
-# For custom tracker (post-MVP):
-# boxmot>=10.0.0        # pip install boxmot
+boxmot>=10.0.0           # BoT-SORT / ByteTrack standalone tracker
 
 # --- Re-ID (Dharmik) ---
 torchreid>=1.4.0         # OSNet model

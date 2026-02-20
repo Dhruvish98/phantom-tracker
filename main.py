@@ -39,7 +39,7 @@ class PhantomTracker:
         state.detections = self.detector.detect(frame, self.frame_id, ts)
         # Stage 2: Track
         state.active_tracks, state.occluded_tracks, state.lost_tracks = \
-            self.tracker.update(state.detections)
+            self.tracker.update(state.detections, frame)
         # Stage 3: Re-ID
         if state.lost_tracks and state.detections:
             state.reid_results = self.reidentifier.match(
