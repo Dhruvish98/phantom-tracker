@@ -1,0 +1,35 @@
+# Data & models
+data/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.venv/
+venv/
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output
+output/
+*.mp4
+*.avi
+!demos/*.mp4

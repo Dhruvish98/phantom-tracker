@@ -1,0 +1,32 @@
+# ============================================
+# Phantom Tracker — Dependencies
+# ============================================
+# Install: pip install -r requirements.txt
+# GPU: Make sure CUDA is available (nvidia-smi)
+
+# --- Core (everyone needs these) ---
+numpy>=1.24.0
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+
+# --- Detection (Divyansh) ---
+ultralytics>=8.3.0      # YOLOv11
+
+# --- Tracking (Dhruvish) ---
+# ultralytics includes built-in BoT-SORT/ByteTrack
+# For custom tracker (post-MVP):
+# boxmot>=10.0.0        # pip install boxmot
+
+# --- Re-ID (Dharmik) ---
+torchreid>=1.4.0         # OSNet model
+# For FastReID alternative (post-MVP):
+# fastreid>=1.4.0
+
+# --- Visualization (Agastya) ---
+# matplotlib>=3.7.0     # for analytics dashboard (post-MVP)
+
+# --- Shared ---
+torch>=2.0.0
+torchvision>=0.15.0
+pyyaml>=6.0
+tqdm>=4.65.0
