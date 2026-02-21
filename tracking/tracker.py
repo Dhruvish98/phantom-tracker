@@ -46,16 +46,34 @@ class Tracker:
         self.total_exits = 0
         self.heatmap = np.zeros(config.heatmap_resolution[::-1], dtype=np.float32)
 
+    def _resolve_device(self) -> str:
+        """Pick the best available device: configured > cuda > cpu."""
+        import torch
+        requested = self.config.tracker_device
+        if requested != "cuda" or torch.cuda.is_available():
+            return requested
+        logger.info("CUDA not available, using CPU for tracker")
+        return "cpu"
+
     def _init_tracker(self):
         """Initialize BoT-SORT via boxmot. Falls back to IoU stub if unavailable."""
         try:
             from boxmot import BotSort
+            device = self._resolve_device()
             self._boxmot_tracker = BotSort(
                 reid_weights=Path(self.config.boxmot_reid_weights),
-                device=self.config.tracker_device,
-                half=self.config.tracker_half_precision,
+                device=device,
+                half=self.config.tracker_half_precision and device != "cpu",
+                track_high_thresh=self.config.track_high_thresh,
+                track_low_thresh=self.config.track_low_thresh,
+                new_track_thresh=self.config.new_track_thresh,
+                track_buffer=self.config.track_buffer,
+                match_thresh=self.config.match_thresh,
+                proximity_thresh=self.config.proximity_thresh,
+                appearance_thresh=self.config.appearance_thresh,
+                frame_rate=self.config.botsort_frame_rate,
             )
-            logger.info(f"BoT-SORT initialized (device={self.config.tracker_device}, "
+            logger.info(f"BoT-SORT initialized (device={device}, "
                         f"reid_weights={self.config.boxmot_reid_weights})")
         except ImportError:
             logger.warning("boxmot not installed. Falling back to IoU-based tracking. "

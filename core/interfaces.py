@@ -172,7 +172,7 @@ class AnalyticsSnapshot:
 class PipelineConfig:
     """Runtime configuration."""
     # Detection
-    yolo_model: str = "yolo11n.pt"
+    yolo_model: str = "yolo11s.pt"
     yolo_confidence: float = 0.5
     use_grounding_dino: bool = False
 
@@ -187,6 +187,16 @@ class PipelineConfig:
     tracker_device: str = "cuda"
     tracker_half_precision: bool = False
     prediction_horizon: int = 15
+
+    # Tracking — BoT-SORT tuning (indoor walking defaults)
+    track_high_thresh: float = 0.45       # confidence for primary association (lower = keep more)
+    track_low_thresh: float = 0.1         # confidence for secondary association pass
+    new_track_thresh: float = 0.5         # min confidence to initialize a new track
+    track_buffer: int = 90                # frames to keep lost track in boxmot (3s @ 30fps)
+    match_thresh: float = 0.85            # IoU matching threshold (higher = stricter)
+    proximity_thresh: float = 0.55        # spatial gate for ReID matching
+    appearance_thresh: float = 0.2        # appearance gate for ReID (lower = more lenient)
+    botsort_frame_rate: int = 30          # assumed frame rate for motion model
 
     # Re-ID
     reid_model: str = "osnet_x1_0"
