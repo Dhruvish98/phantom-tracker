@@ -81,9 +81,26 @@ class PhantomTracker:
                     cv2.imshow("Phantom Tracker", state.output_frame)
                     k = cv2.waitKey(1) & 0xFF
                     if k == ord("q"): break
-                    for key, attr in [("t","show_trails"),("g","show_ghost_outlines"),
-                                      ("p","show_predicted_path"),("i","show_ids"),("f","show_fps")]:
-                        if k == ord(key): setattr(self.config, attr, not getattr(self.config, attr))
+                    # Toggle visualization features
+                    toggles = [
+                        ("t", "show_trails"),
+                        ("g", "show_ghost_outlines"),
+                        ("p", "show_predicted_path"),
+                        ("i", "show_ids"),
+                        ("f", "show_fps")
+                    ]
+                    for key, attr in toggles:
+                        if k == ord(key):
+                            setattr(self.config, attr, not getattr(self.config, attr))
+                            logger.info(f"{attr}: {getattr(self.config, attr)}")
+                    
+                    # Toggle visualizer-specific features
+                    if k == ord("h"):
+                        self.visualizer.show_heatmap = not self.visualizer.show_heatmap
+                        logger.info(f"Heatmap: {self.visualizer.show_heatmap}")
+                    if k == ord("d"):
+                        self.visualizer.show_dashboard = not self.visualizer.show_dashboard
+                        logger.info(f"Dashboard: {self.visualizer.show_dashboard}")
         finally:
             cap.release()
             if writer: writer.release()
