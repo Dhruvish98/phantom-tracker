@@ -46,6 +46,8 @@ python main.py --input video.mp4 --output result.mp4
 | `p` | Predicted future path |
 | `i` | ID labels |
 | `f` | FPS counter |
+| `h` | Heatmap overlay |
+| `d` | Analytics dashboard |
 
 ## Project Structure
 
