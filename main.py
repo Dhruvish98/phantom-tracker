@@ -1,8 +1,11 @@
 """
 Phantom Tracker — Main Pipeline
-Run:  python main.py                    # webcam
-      python main.py --input video.mp4  # video file
-Keys: [q] quit  [t] trails  [g] ghost  [p] predicted  [i] IDs  [f] FPS
+Run:  python main.py                                       # webcam
+      python main.py --input video.mp4                     # video file
+      python main.py --input video.mp4 --classes person    # person-only
+      python main.py --input video.mp4 --half              # FP16 on GPU
+Keys: [q] quit  [t] trails  [g] ghost  [p] predicted  [i] IDs
+      [f] FPS   [h] heatmap  [d] dashboard
 """
 
 import cv2, time, argparse
@@ -118,10 +121,15 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--input", type=str, default=None)
     p.add_argument("--output", type=str, default=None)
-    p.add_argument("--yolo-model", type=str, default="yolo11n.pt")
+    p.add_argument("--yolo-model", type=str, default="yolo11s.pt")
     p.add_argument("--confidence", type=float, default=0.5)
+    p.add_argument("--classes", type=str, default=None,
+                   help="Comma-separated class filter, e.g. 'person,backpack'")
+    p.add_argument("--half", action="store_true", help="FP16 inference (GPU only)")
     p.add_argument("--no-display", action="store_true")
     a = p.parse_args()
+    detect_classes = [c.strip() for c in a.classes.split(",")] if a.classes else []
     cfg = PipelineConfig(yolo_model=a.yolo_model, yolo_confidence=a.confidence,
+                         detect_classes=detect_classes, yolo_half=a.half,
                          input_source=a.input if a.input else 0)
     PhantomTracker(cfg).run(a.input if a.input else 0, not a.no_display, a.output)

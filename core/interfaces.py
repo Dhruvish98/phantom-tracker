@@ -175,6 +175,9 @@ class PipelineConfig:
     # Detection
     yolo_model: str = "yolo11s.pt"
     yolo_confidence: float = 0.5
+    yolo_device: str = "auto"              # "auto" | "cpu" | "0" (GPU index)
+    yolo_half: bool = False                # FP16 inference (GPU only, ~2x speedup)
+    detect_classes: list = field(default_factory=list)  # e.g. ["person"] — empty = all
     use_grounding_dino: bool = False
 
     # Tracking

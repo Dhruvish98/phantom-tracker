@@ -48,11 +48,14 @@ class Tracker:
         self.reid_events: list[str] = []  # for dashboard display
 
     def _resolve_device(self) -> str:
-        """Pick the best available device: configured > cuda > cpu."""
+        """Pick the best available device: configured > cuda > cpu.
+        boxmot expects a device index ('0') not 'cuda', so we convert."""
         import torch
         requested = self.config.tracker_device
-        if requested != "cuda" or torch.cuda.is_available():
-            return requested
+        if requested == "cpu":
+            return "cpu"
+        if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+            return "0"
         logger.info("CUDA not available, using CPU for tracker")
         return "cpu"
 
