@@ -40,11 +40,17 @@ class PhantomTracker:
         # Stage 2: Track
         state.active_tracks, state.occluded_tracks, state.lost_tracks = \
             self.tracker.update(state.detections, frame)
+        # Stage 2.5: Update appearance gallery for active tracks (feeds Re-ID)
+        for track in state.active_tracks:
+            if self.frame_id % 5 == 0:  # every 5th frame to save compute
+                self.reidentifier.update_gallery(track, frame)
+
         # Stage 3: Re-ID
         if state.lost_tracks and state.detections:
             state.reid_results = self.reidentifier.match(
                 state.detections, state.lost_tracks,
-                {t.track_id for t in state.active_tracks})
+                {t.track_id for t in state.active_tracks},
+                frame=frame)
             if state.reid_results and state.reid_results.matches:
                 self.tracker.apply_reid_results(state.reid_results)
         # Stage 4: Visualize

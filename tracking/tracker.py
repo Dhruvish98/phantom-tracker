@@ -45,6 +45,7 @@ class Tracker:
         self.total_entries = 0
         self.total_exits = 0
         self.heatmap = np.zeros(config.heatmap_resolution[::-1], dtype=np.float32)
+        self.reid_events: list[str] = []  # for dashboard display
 
     def _resolve_device(self) -> str:
         """Pick the best available device: configured > cuda > cpu."""
@@ -117,8 +118,10 @@ class Tracker:
                 track = self.tracks[match.matched_track_id]
                 track.state = TrackState.ACTIVE
                 track.frames_since_seen = 0
-                logger.info(f"Re-ID: Track #{track.track_id} reactivated "
-                            f"(confidence: {match.similarity_score:.1%})")
+                event_str = (f"Track #{track.track_id} re-identified "
+                             f"({match.similarity_score:.1%})")
+                self.reid_events.append(event_str)
+                logger.info(f"Re-ID: {event_str}")
 
     def get_analytics(self, frame_id: int, timestamp: float) -> AnalyticsSnapshot:
         """Build analytics snapshot for Agastya's dashboard."""
@@ -134,6 +137,7 @@ class Tracker:
             total_entries=self.total_entries, total_exits=self.total_exits,
             current_object_count=sum(1 for t in self.tracks.values()
                                      if t.state in (TrackState.ACTIVE, TrackState.OCCLUDED)),
+            reid_events=list(self.reid_events),
         )
 
     # ================================================================
