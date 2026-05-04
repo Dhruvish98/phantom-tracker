@@ -133,13 +133,29 @@ def prepare_kitti_sequence(
     kitti_root = Path(kitti_root).expanduser().resolve()
     output_root = Path(output_root).expanduser().resolve()
 
-    src_img_dir = kitti_root / "data_tracking_image_2" / "training" / "image_02" / sequence_id
-    src_label = kitti_root / "data_tracking_label_2" / "training" / "label_02" / f"{sequence_id}.txt"
-
-    if not src_img_dir.is_dir():
-        raise FileNotFoundError(f"KITTI image dir not found: {src_img_dir}")
-    if not src_label.is_file():
-        raise FileNotFoundError(f"KITTI label file not found: {src_label}")
+    # Two layouts in the wild:
+    #   1. Official multi-zip layout: kitti_root/data_tracking_image_2/training/image_02/<seq>/...
+    #   2. Single-zip layout (when each zip is extracted directly into kitti_root):
+    #        kitti_root/training/image_02/<seq>/...
+    # Probe both and use whichever exists.
+    candidates = [
+        (kitti_root / "data_tracking_image_2" / "training" / "image_02",
+         kitti_root / "data_tracking_label_2" / "training" / "label_02"),
+        (kitti_root / "training" / "image_02",
+         kitti_root / "training" / "label_02"),
+    ]
+    src_img_dir = src_label = None
+    for img_base, label_base in candidates:
+        if (img_base / sequence_id).is_dir() and (label_base / f"{sequence_id}.txt").is_file():
+            src_img_dir = img_base / sequence_id
+            src_label = label_base / f"{sequence_id}.txt"
+            break
+    if src_img_dir is None:
+        raise FileNotFoundError(
+            f"KITTI sequence {sequence_id} not found under {kitti_root}. "
+            f"Expected either data_tracking_image_2/training/image_02/{sequence_id}/ "
+            f"or training/image_02/{sequence_id}/."
+        )
 
     seq_dir = output_root / sequence_id
     img1_dir = seq_dir / "img1"
@@ -208,8 +224,17 @@ def main():
     if args.sequences:
         seq_ids = args.sequences
     else:
-        label_dir = kitti_root / "data_tracking_label_2" / "training" / "label_02"
-        seq_ids = [p.stem for p in sorted(label_dir.glob("*.txt"))]
+        # Probe both possible label dir layouts (see prepare_kitti_sequence)
+        for candidate in [
+            kitti_root / "data_tracking_label_2" / "training" / "label_02",
+            kitti_root / "training" / "label_02",
+        ]:
+            if candidate.is_dir():
+                seq_ids = [p.stem for p in sorted(candidate.glob("*.txt"))]
+                break
+        else:
+            logger.error(f"No KITTI label dir found under {kitti_root}")
+            return
 
     for sid in seq_ids:
         try:
