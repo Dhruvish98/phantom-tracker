@@ -23,8 +23,9 @@ logger = setup_logger(__name__)
 
 
 class Detector:
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, camera_id: str = "default"):
         self.config = config
+        self.camera_id = camera_id  # tagged on every FrameDetections produced
         self.yolo_model = None
         self._class_indices = None  # YOLO class IDs to filter (None = all)
         self._load_yolo()
@@ -77,7 +78,8 @@ class Detector:
         elapsed = (time.time() - start) * 1000
         return FrameDetections(
             frame_id=frame_id, timestamp=timestamp,
-            detections=detections, source="yolo", inference_time_ms=elapsed)
+            detections=detections, source="yolo",
+            inference_time_ms=elapsed, camera_id=self.camera_id)
 
     def _detect_yolo(self, frame: np.ndarray) -> list[Detection]:
         """

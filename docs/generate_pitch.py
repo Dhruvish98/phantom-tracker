@@ -83,7 +83,7 @@ def build():
     pdf.ln(12)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(60, 60, 60)
-    pdf.cell(0, 7, "Presenter: Dhruvish Parekh", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "Presenter: Dhruvish Shah", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 7, "Date: March 4, 2026", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(15)
     pdf.set_font("Helvetica", "B", 11)
@@ -132,7 +132,7 @@ def build():
         "The system is a four-stage pipeline. Each frame flows through these stages sequentially:"
     )
     pdf.speak(
-        "Stage 1 is Detection. Divyansh built the detection module using YOLOv11s. It takes a raw video frame "
+        "Stage 1 is Detection. Divyansh Singh built the detection module using YOLOv11s. It takes a raw video frame "
         "and outputs bounding boxes with class labels and confidence scores. We added class filtering  - so for "
         "our demos, we can tell it to only detect people, or only cars, right at the YOLO level. On our RTX 2050 GPU, "
         "YOLO alone runs at 73 FPS."
@@ -147,14 +147,14 @@ def build():
         "After 300 frames, it's Deleted."
     )
     pdf.speak(
-        "Stage 3 is Re-Identification  - Dharmik's module. He built an OSNet-based feature extractor that "
+        "Stage 3 is Re-Identification  - Dharmik Kothari's module. He built an OSNet-based feature extractor that "
         "produces 512-dimensional embeddings for each person crop. Each track maintains an appearance gallery "
         "with temporal decay  - recent appearances matter more. When a new detection appears and there are lost "
         "tracks, the Re-ID module computes cosine similarity against all lost track galleries. If the similarity "
         "exceeds 60%, the lost track is reactivated with its original ID."
     )
     pdf.speak(
-        "Stage 4 is Visualization  - Agastya's module. He built an 800-line rendering engine with trajectory "
+        "Stage 4 is Visualization  - Agastya Shetty's module. He built an 800-line rendering engine with trajectory "
         "trails, ghost outlines for occluded objects, predicted future paths, a spatial heatmap, and a live "
         "analytics dashboard showing speeds, dwell times, and Re-ID events."
     )
@@ -282,7 +282,7 @@ def build():
         ("Can this run on a laptop without GPU?",
          "Yes. The system automatically falls back to CPU for all modules. YOLO detection will be slower  - around 5-8 FPS instead of 70+  - and the tracker also has an IoU-based fallback if boxmot can't initialize. The experience is slower but fully functional."),
         ("What is the ghost icon on occluded objects?",
-         "That's Agastya's visualization for occluded tracks. When an object becomes hidden, we show a ghost outline at the predicted position along with a ghost icon  - a circle with two dots for eyes. The expanding ring around it shows increasing uncertainty as the object stays hidden longer."),
+         "That's Agastya Shetty's visualization for occluded tracks. When an object becomes hidden, we show a ghost outline at the predicted position along with a ghost icon  - a circle with two dots for eyes. The expanding ring around it shows increasing uncertainty as the object stays hidden longer."),
     ]
 
     for q, a in qa:

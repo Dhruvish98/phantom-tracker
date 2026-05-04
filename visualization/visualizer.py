@@ -163,8 +163,13 @@ class Visualizer:
             cv2.line(frame, (x2, y2), (x2 - corner_length, y2), color_bgr, corner_thickness)
             cv2.line(frame, (x2, y2), (x2, y2 - corner_length), color_bgr, corner_thickness)
 
-            # ID label with background
-            label = f"ID:{track.track_id} {track.class_name}"
+            # ID label with background. In multi-camera mode (track.global_id set),
+            # lead with the global identity so the same person reads the same on
+            # both feeds; the per-camera track_id stays visible for debugging.
+            if track.global_id is not None:
+                label = f"G{track.global_id} (#{track.track_id}) {track.class_name}"
+            else:
+                label = f"ID:{track.track_id} {track.class_name}"
             if track.confidence > 0:
                 label += f" {track.confidence:.0%}"
 

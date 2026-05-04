@@ -14,7 +14,6 @@ Implementation:
 """
 
 import numpy as np
-import time
 from pathlib import Path
 from core.interfaces import (
     Track, TrackState, FrameDetections, ReIDResult,
@@ -32,8 +31,9 @@ _DEFAULT_FPS = 30.0
 
 
 class Tracker:
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PipelineConfig, camera_id: str = "default"):
         self.config = config
+        self.camera_id = camera_id   # stamped on every Track this tracker creates
         self.tracks: dict[int, Track] = {}
         self.next_track_id = 1  # only used by IoU fallback
         self.deleted_tracks: dict[int, Track] = {}
@@ -46,6 +46,24 @@ class Tracker:
         self.total_exits = 0
         self.heatmap = np.zeros(config.heatmap_resolution[::-1], dtype=np.float32)
         self.reid_events: list[str] = []  # for dashboard display
+
+        # Re-ID continuity: maps boxmot's freshly-assigned track_id to our canonical
+        # track_id when Re-ID matches a new detection back to a previously lost track.
+        # Without this, every Re-ID match would leave a duplicate track behind because
+        # boxmot keeps reporting the new ID indefinitely.
+        self._boxmot_to_canonical: dict[int, int] = {}
+        # Maps detection index -> boxmot track_id for the current frame, populated
+        # in _update_boxmot and consumed by apply_reid_results.
+        self._current_det_to_boxmot: dict[int, int] = {}
+
+        # Optional LSTM motion predictor. Replaces linear extrapolation in
+        # _extrapolate_position when weights are available. Returns None silently
+        # when the file is missing or torch isn't installed - linear fallback works.
+        from tracking.lstm_motion import load_predictor
+        self._lstm_motion = load_predictor(
+            getattr(config, "lstm_motion_weights", ""),
+            device="cpu",  # tiny model; CPU is fine and avoids GPU contention
+        )
 
     def _resolve_device(self) -> str:
         """Pick the best available device: configured > cuda > cpu.
@@ -107,24 +125,49 @@ class Tracker:
             return self._update_fallback(frame_detections)
         return self._update_boxmot(frame_detections, frame)
 
-    def apply_reid_results(self, reid_results: ReIDResult):
+    def apply_reid_results(self, reid_results: ReIDResult,
+                           detections: FrameDetections = None):
         """
-        Apply Dharmik's Re-ID matches: restore Lost tracks to Active.
+        Apply Dharmik's Re-ID matches: restore Lost tracks to Active and merge
+        the duplicate boxmot-created track into the canonical (older) track.
 
-        When Re-ID says "new detection #3 matches lost track #7",
-        we reactivate track #7 with the new detection's bbox.
+        When Re-ID says "new detection #3 matches lost track #7":
+          1. Update Track #7's bbox to detection #3's current position
+          2. Mark Track #7 ACTIVE
+          3. Find the boxmot-created track that was assigned to detection #3
+             this frame, register it as an alias of Track #7 (so future
+             boxmot updates route to #7), and delete the duplicate from
+             our internal track dict.
         """
         for match in reid_results.matches:
             if not match.is_confident:
                 continue
-            if match.matched_track_id in self.tracks:
-                track = self.tracks[match.matched_track_id]
-                track.state = TrackState.ACTIVE
-                track.frames_since_seen = 0
-                event_str = (f"Track #{track.track_id} re-identified "
-                             f"({match.similarity_score:.1%})")
-                self.reid_events.append(event_str)
-                logger.info(f"Re-ID: {event_str}")
+            canonical_id = match.matched_track_id
+            if canonical_id not in self.tracks:
+                continue
+            track = self.tracks[canonical_id]
+
+            # Update the matched track's bbox to the new detection's position
+            if detections is not None and 0 <= match.new_detection_idx < len(detections.detections):
+                det = detections.detections[match.new_detection_idx]
+                track.bbox = det.bbox.astype(np.float32)
+                track.confidence = det.confidence
+
+            track.state = TrackState.ACTIVE
+            track.frames_since_seen = 0
+
+            # Register the boxmot duplicate as an alias of the canonical track
+            # and delete the duplicate so future boxmot updates route correctly.
+            boxmot_id = self._current_det_to_boxmot.get(match.new_detection_idx)
+            if boxmot_id is not None and boxmot_id != canonical_id:
+                self._boxmot_to_canonical[boxmot_id] = canonical_id
+                if boxmot_id in self.tracks and boxmot_id != canonical_id:
+                    del self.tracks[boxmot_id]
+
+            event_str = (f"Track #{canonical_id} re-identified "
+                         f"({match.similarity_score:.1%})")
+            self.reid_events.append(event_str)
+            logger.info(f"Re-ID: {event_str}")
 
     def get_analytics(self, frame_id: int, timestamp: float) -> AnalyticsSnapshot:
         """Build analytics snapshot for Agastya's dashboard."""
@@ -134,7 +177,7 @@ class Tracker:
                  if t.state != TrackState.DELETED}
 
         return AnalyticsSnapshot(
-            frame_id=frame_id, timestamp=timestamp,
+            frame_id=frame_id, timestamp=timestamp, camera_id=self.camera_id,
             track_speeds=speeds, track_dwell_times=dwell,
             heatmap_accumulator=self.heatmap.copy(),
             total_entries=self.total_entries, total_exits=self.total_exits,
@@ -174,18 +217,30 @@ class Tracker:
         results = self._boxmot_tracker.update(dets_array, frame)
         # results shape: (M, 8) — [x1, y1, x2, y2, track_id, conf, cls_id, det_index]
 
-        # Step 3: Process boxmot output
+        # Step 3: Process boxmot output (applying canonical-ID remapping for
+        # boxmot tracks that were merged with older identities by Re-ID)
         current_ids = set()
+        self._current_det_to_boxmot = {}
 
         if results is not None and len(results) > 0:
             for row in results:
                 x1, y1, x2, y2 = row[0:4]
-                track_id = int(row[4])
+                boxmot_id = int(row[4])
                 conf = float(row[5])
                 cls_id = int(row[6])
                 bbox = np.array([x1, y1, x2, y2], dtype=np.float32)
                 class_name = self._resolve_class_name(frame_detections, cls_id, row)
 
+                # Remember which boxmot id was assigned to which detection this frame.
+                # apply_reid_results uses this to merge duplicates created when Re-ID
+                # matches a fresh detection back to a previously lost track.
+                if len(row) > 7:
+                    det_idx = int(row[7])
+                    self._current_det_to_boxmot[det_idx] = boxmot_id
+
+                # If Re-ID has previously merged this boxmot id into an older
+                # canonical track, route updates to the canonical track instead.
+                track_id = self._boxmot_to_canonical.get(boxmot_id, boxmot_id)
                 current_ids.add(track_id)
 
                 if track_id in self.tracks:
@@ -220,6 +275,7 @@ class Tracker:
             confidence=conf,
             class_name=class_name,
             color=color,
+            camera_id=self.camera_id,
             first_seen_timestamp=timestamp,
             last_seen_timestamp=timestamp,
             trajectory_history=[(cx, cy, timestamp)],
@@ -328,15 +384,13 @@ class Tracker:
 
     def _extrapolate_position(self, track: Track):
         """
-        Extrapolate bbox for an unseen track using EMA velocity.
+        Extrapolate bbox for an unseen track. Uses the LSTM motion predictor
+        when trained weights are available; falls back to linear EMA-velocity
+        extrapolation otherwise.
+
         Provides the ghost bbox for Agastya's visualization.
         """
-        cx, cy = track.center
-        vx, vy = track.velocity
-        dt = 1.0 / _DEFAULT_FPS
-
-        pred_cx = cx + vx * dt
-        pred_cy = cy + vy * dt
+        pred_cx, pred_cy = self._predict_next_center(track)
 
         # Clamp to frame boundaries
         pred_cx = float(np.clip(pred_cx, 0, self.config.frame_width))
@@ -349,6 +403,22 @@ class Tracker:
             pred_cx + w / 2, pred_cy + h / 2
         ], dtype=np.float32)
         track.predicted_position = np.array([pred_cx, pred_cy])
+
+    def _predict_next_center(self, track: Track) -> tuple[float, float]:
+        """One-step-ahead center prediction. Routes to LSTM if available, else
+        linear EMA velocity extrapolation."""
+        if self._lstm_motion is not None:
+            from tracking.lstm_motion import predict_future_positions
+            future = predict_future_positions(
+                self._lstm_motion, track.trajectory_history, horizon=1, device="cpu",
+            )
+            if future is not None and len(future) >= 1:
+                return float(future[0][0]), float(future[0][1])
+        # Linear fallback
+        cx, cy = track.center
+        vx, vy = track.velocity
+        dt = 1.0 / _DEFAULT_FPS
+        return cx + vx * dt, cy + vy * dt
 
     def _update_predictions(self):
         """Compute predicted_trajectory for active tracks (future path visualization)."""

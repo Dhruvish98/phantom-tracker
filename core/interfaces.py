@@ -1,4 +1,3 @@
-from __future__ import annotations
 """
 Phantom Tracker — Shared Interfaces
 =====================================
@@ -8,6 +7,7 @@ Rules:
   - Never rename a field without updating all consumers
   - Add new fields freely, never remove existing ones
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -46,6 +46,7 @@ class FrameDetections:
     detections: list[Detection]
     source: str = "yolo"           # "yolo" | "grounding_dino"
     inference_time_ms: float = 0.0
+    camera_id: str = "default"     # which camera produced these detections (multi-cam)
 
 
 # ============================================================
@@ -68,6 +69,10 @@ class Track:
     confidence: float
     class_name: str
     color: tuple                         # (R, G, B) persistent
+
+    # Multi-camera identity
+    camera_id: str = "default"           # which camera this track lives on
+    global_id: Optional[int] = None      # cross-camera canonical id (assigned by multi-cam Re-ID)
 
     # Motion
     velocity: np.ndarray = field(default_factory=lambda: np.zeros(2))
@@ -134,6 +139,7 @@ class FrameState:
     frame_id: int
     timestamp: float
     raw_frame: np.ndarray
+    camera_id: str = "default"   # which camera this frame is from (multi-cam)
 
     detections: Optional[FrameDetections] = None
     active_tracks: list = field(default_factory=list)
@@ -156,6 +162,7 @@ class AnalyticsSnapshot:
     """Cumulative analytics for the dashboard."""
     frame_id: int
     timestamp: float
+    camera_id: str = "default"
     track_speeds: dict = field(default_factory=dict)
     track_dwell_times: dict = field(default_factory=dict)
     heatmap_accumulator: Optional[np.ndarray] = None
@@ -179,6 +186,8 @@ class PipelineConfig:
     yolo_half: bool = False                # FP16 inference (GPU only, ~2x speedup)
     detect_classes: list = field(default_factory=list)  # e.g. ["person"] — empty = all
     use_grounding_dino: bool = False
+    grounding_dino_prompt: str = "person."   # period-separated phrases, e.g. "person. backpack."
+    grounding_dino_checkpoint: str = "IDEA-Research/grounding-dino-tiny"
 
     # Tracking
     tracker_type: str = "botsort"
@@ -191,6 +200,11 @@ class PipelineConfig:
     tracker_device: str = "cuda"
     tracker_half_precision: bool = False
     prediction_horizon: int = 15
+
+    # LSTM motion predictor (replaces linear extrapolation when weights present).
+    # Empty string -> always use linear fallback. See tracking/train_lstm.py to
+    # produce the weights file from extracted MOT17 / demo trajectories.
+    lstm_motion_weights: str = "weights/lstm_motion.pt"
 
     # Tracking — BoT-SORT tuning (indoor walking defaults)
     track_high_thresh: float = 0.45       # confidence for primary association (lower = keep more)
@@ -207,6 +221,24 @@ class PipelineConfig:
     reid_confidence_threshold: float = 0.6
     gallery_max_size: int = 50
     temporal_decay_rate: float = 0.95
+
+    # Cross-camera Re-ID (multi-camera mode)
+    # Threshold is intentionally lower than single-camera reid_confidence_threshold:
+    # cross-camera always involves viewpoint/lighting/scale differences that single-
+    # camera matching does not, so OSNet similarity scores naturally land 0.1-0.2
+    # lower for the same person across cameras vs the same person re-entering one camera.
+    # 0.38 was chosen empirically: live phone+laptop testing showed legitimate
+    # same-person matches landing as low as 0.400, with all confirmed matches in
+    # the [0.44, 0.58] range. 0.38 leaves a 0.02 cushion below the lowest observed
+    # legitimate match without dropping deep enough to admit obvious false positives.
+    cross_camera_threshold: float = 0.38
+    # min_transit_s = 0 lets a person be matched immediately on a new camera even if
+    # the source camera still has them as an active track (brief FOV overlap, or the
+    # source tracker lagging behind). The same-camera filter already prevents self-
+    # handoff, so this only relaxes when the person is genuinely on a *different* cam.
+    cross_camera_min_transit_s: float = 0.0
+    cross_camera_max_transit_s: float = 30.0   # identity expires after this gap
+    cross_camera_gallery_size: int = 20        # max embeddings per global identity
 
     # Visualization
     trail_length: int = 60

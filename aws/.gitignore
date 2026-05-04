@@ -1,0 +1,3 @@
+# Local-only AWS state: instance IDs, public IPs, SSH private keys.
+# NEVER commit any of this.
+state/

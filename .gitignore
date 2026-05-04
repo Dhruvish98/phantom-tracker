@@ -33,3 +33,11 @@ output/
 *.mp4
 *.avi
 !demos/*.mp4
+demos/tracked_*.mp4
+trajectories_*.npy
+weights/
+*.history.json
+
+# Local agent state + AWS instance state (SSH keys MUST stay out of git)
+.claude/
+aws/state/
