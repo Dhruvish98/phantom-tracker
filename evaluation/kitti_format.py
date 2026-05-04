@@ -56,20 +56,35 @@ def convert_kitti_label(
     kitti_label_path: Path,
     mot_gt_path: Path,
     classes: set[str] | None = None,
+    max_truncation: float = 0.15,
+    max_occlusion: int = 1,
 ) -> int:
     """
     Convert one KITTI label file to MOT-format gt.txt.
+
+    The official KITTI tracking eval protocol restricts evaluation to objects
+    that are (a) of an evaluable class, (b) not significantly truncated, and
+    (c) at most partly occluded. Including truncated/heavily-occluded objects
+    in GT would unfairly count against any 2D detector (the objects are
+    physically not visible enough for any detector to find).
+
+    KITTI columns 3 and 4 (0-indexed):
+      truncated: float in [0, 1] (fraction of object outside image bounds)
+      occluded:  int 0=fully visible, 1=partly, 2=heavily, 3=unknown
 
     Args:
         kitti_label_path: KITTI's label_02/<seq>.txt
         mot_gt_path:      where to write MOT-format gt.txt
         classes:          KITTI class names to keep (default: trackable classes)
+        max_truncation:   drop GT with truncation > this (default 0.15, KITTI default)
+        max_occlusion:    drop GT with occlusion > this (default 1, i.e. keep
+                          fully-visible and partly-occluded only)
 
     Returns:
         Number of detection rows written.
     """
     keep = set(classes) if classes else KITTI_TRACKABLE_CLASSES
-    n_in = n_out = 0
+    n_in = n_kept_class = n_out = 0
     mot_gt_path.parent.mkdir(parents=True, exist_ok=True)
     with kitti_label_path.open() as fin, mot_gt_path.open("w") as fout:
         for line in fin:
@@ -80,28 +95,35 @@ def convert_kitti_label(
             cls = parts[2]
             if cls not in keep:
                 continue
+            n_kept_class += 1
             try:
                 frame = int(parts[0])
                 track_id = int(parts[1])
+                truncated = float(parts[3])
+                occluded = int(parts[4])
                 x1 = float(parts[6])
                 y1 = float(parts[7])
                 x2 = float(parts[8])
                 y2 = float(parts[9])
             except ValueError:
                 continue
+            # KITTI eval protocol: skip heavily truncated or occluded objects.
+            if truncated > max_truncation:
+                continue
+            if occluded > max_occlusion:
+                continue
             # MOT format is 1-indexed for frames; KITTI is 0-indexed.
             mot_frame = frame + 1
             w = max(0.0, x2 - x1)
             h = max(0.0, y2 - y1)
             # MOT GT columns: frame, id, bb_left, bb_top, bb_w, bb_h, conf, class, vis, z
-            # We use class=1 (consider_in_evaluation=True), conf=1, vis=1 (KITTI doesn't expose visibility)
             fout.write(
                 f"{mot_frame},{track_id},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},1,1,1\n"
             )
             n_out += 1
     logger.info(
-        f"[KITTI] {kitti_label_path.name}: {n_in} rows -> {n_out} kept "
-        f"(classes={sorted(keep)})"
+        f"[KITTI] {kitti_label_path.name}: {n_in} rows -> {n_kept_class} class-matched -> "
+        f"{n_out} after visibility filter (trunc<={max_truncation}, occ<={max_occlusion})"
     )
     return n_out
 
