@@ -181,11 +181,27 @@ def main():
     src = Path(args.crowdhuman_root).expanduser().resolve()
     out = Path(args.output_root).expanduser().resolve()
 
+    # CrowdHuman's official zips are NOT pre-split per train/val on disk - the
+    # zips deliver one flat `Images/` directory with all 19,370 images. The
+    # split is determined by which ODGT references each image. Probe both
+    # layouts (pre-split and flat) so this script works in either case.
+    flat_dir_candidates = [
+        src / "Images",                   # if user moved jpgs here
+        src / "Images" / "Images",        # natural sshao0516 zip layout (Images/<file>.jpg)
+    ]
+    flat_images_dir = None
+    for c in flat_dir_candidates:
+        if c.is_dir() and any(c.glob("*.jpg")):
+            flat_images_dir = c
+            break
+
     for split in ("train", "val"):
-        images_dir = src / "Images" / split
+        # If a pre-split directory exists, prefer it
+        split_dir = src / "Images" / split
+        images_dir = split_dir if split_dir.is_dir() and any(split_dir.glob("*.jpg")) else flat_images_dir
         odgt_path = src / f"annotation_{split}.odgt"
-        if not images_dir.is_dir() or not odgt_path.is_file():
-            logger.warning(f"[CrowdHuman] missing {split}: images={images_dir.is_dir()}, "
+        if images_dir is None or not odgt_path.is_file():
+            logger.warning(f"[CrowdHuman] missing {split}: images_dir={images_dir}, "
                            f"odgt={odgt_path.is_file()}")
             continue
         n_imgs, n_boxes, n_missing = convert_split(
@@ -198,7 +214,7 @@ def main():
         )
         logger.info(
             f"[CrowdHuman] {split}: {n_imgs} images, {n_boxes} boxes "
-            f"({n_missing} images skipped due to missing files)"
+            f"(source={images_dir.name}; {n_missing} images skipped due to missing files)"
         )
 
     yaml_path = write_dataset_yaml(out)
