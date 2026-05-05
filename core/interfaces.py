@@ -180,7 +180,10 @@ class AnalyticsSnapshot:
 class PipelineConfig:
     """Runtime configuration."""
     # Detection
-    yolo_model: str = "yolo11s.pt"
+    # Default is yolo11l (large): better recall + accuracy than yolo11s, especially
+    # important after fine-tuning on CrowdHuman where the larger backbone shows its
+    # capacity. yolo11s.pt and yolo11x.pt remain valid alternatives via --yolo-model.
+    yolo_model: str = "yolo11l.pt"
     yolo_confidence: float = 0.5
     yolo_device: str = "auto"              # "auto" | "cpu" | "0" (GPU index)
     yolo_half: bool = False                # FP16 inference (GPU only, ~2x speedup)
