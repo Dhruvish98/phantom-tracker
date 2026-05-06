@@ -31,10 +31,26 @@ class Detector:
         self._load_yolo()
 
     def _load_yolo(self):
-        """Load YOLOv11 with device selection and optional FP16."""
+        """Load YOLOv11 with device selection and optional FP16.
+
+        If the configured weights point at a local file that does not exist
+        (e.g. our CrowdHuman fine-tuned weights aren't pulled on this machine),
+        fall back to the off-the-shelf yolo11l.pt that ultralytics auto-downloads.
+        """
         try:
             from ultralytics import YOLO
-            self.yolo_model = YOLO(self.config.yolo_model)
+            from pathlib import Path
+            requested = self.config.yolo_model
+            # Local path that doesn't exist? Fall back to ultralytics auto-download.
+            if "/" in requested or "\\" in requested:
+                if not Path(requested).is_file():
+                    fallback = "yolo11l.pt"
+                    logger.warning(
+                        f"YOLO weights not found at {requested!r}; falling back to "
+                        f"{fallback!r} (auto-downloads from ultralytics)."
+                    )
+                    requested = fallback
+            self.yolo_model = YOLO(requested)
 
             # Resolve device
             device = self.config.yolo_device

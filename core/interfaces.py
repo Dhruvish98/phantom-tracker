@@ -180,10 +180,15 @@ class AnalyticsSnapshot:
 class PipelineConfig:
     """Runtime configuration."""
     # Detection
-    # Default is yolo11l (large): better recall + accuracy than yolo11s, especially
-    # important after fine-tuning on CrowdHuman where the larger backbone shows its
-    # capacity. yolo11s.pt and yolo11x.pt remain valid alternatives via --yolo-model.
-    yolo_model: str = "yolo11l.pt"
+    # Default points at our CrowdHuman-fine-tuned yolo11l checkpoint (76MB, lives at
+    # weights/yolo11l_crowdhuman/best.pt). Trained 23 epochs on CrowdHuman train,
+    # final mAP@50 = 0.876, recall = 0.786 on CrowdHuman val. Substantially better
+    # person detection than off-the-shelf yolo11l/s on real-world video.
+    #
+    # Falls back automatically to "yolo11l.pt" (auto-downloads from Ultralytics)
+    # if the local fine-tuned weights aren't present - kept this as a safety net
+    # so the pipeline still works on machines without our weights.
+    yolo_model: str = "weights/yolo11l_crowdhuman/best.pt"
     yolo_confidence: float = 0.5
     yolo_device: str = "auto"              # "auto" | "cpu" | "0" (GPU index)
     yolo_half: bool = False                # FP16 inference (GPU only, ~2x speedup)
